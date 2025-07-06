@@ -1,0 +1,7 @@
+let a = 5;
+let b = 10;
+fn multiply(x, y) {
+    return x * y;
+}
+let result = multiply(a, b);
+result;

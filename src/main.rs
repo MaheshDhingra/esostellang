@@ -568,50 +568,87 @@ fn op_prec(op: Op) -> u8 {
     }
 }
 
+use std::fs;
+use std::env;
+
 fn main() {
-    println!("Welcome to Mini Esolang REPL!");
-    println!("Supports variables, functions, operators, and error handling.");
-    println!("Type 'exit;' to quit.");
+    let args: Vec<String> = env::args().collect();
 
     let mut interpreter = Interpreter::new();
 
-    loop {
-        print!(">>> ");
-        io::stdout().flush().unwrap();
+    if args.len() > 1 {
+        // File mode
+        let file_path = &args[1];
+        let code = match fs::read_to_string(file_path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("Error reading file {}: {}", file_path, e);
+                return;
+            }
+        };
 
-        let mut input = String::new();
-        if io::stdin().read_line(&mut input).unwrap() == 0 {
-            break; // EOF
-        }
-
-        if input.trim() == "exit;" {
-            println!("Bye!");
-            break;
-        }
-
-        let mut parser = Parser::new(&input);
+        let mut parser = Parser::new(&code);
         match parser.parse_program() {
             Ok(stmts) => {
-                let mut error_occurred = false;
                 for stmt in stmts {
                     if let Err(e) = interpreter.exec_stmt(&stmt) {
-                        println!("Runtime Error: {:?}", e);
-                        error_occurred = true;
+                        eprintln!("Runtime Error: {:?}", e);
                         break;
                     } else if let Stmt::Expr(expr) = stmt {
-                        // print expression result
                         match interpreter.eval_expr(&expr) {
                             Ok(RuntimeValue::Int(i)) => println!("{}", i),
                             Ok(_) => (),
-                            Err(e) => println!("Runtime Error: {:?}", e),
+                            Err(e) => eprintln!("Runtime Error: {:?}", e),
                         }
                     }
                 }
-                if error_occurred {
-                    continue;
-                }
             }
-            Err(e) => println!("Parse Error: {}", e),
+            Err(e) => eprintln!("Parse Error: {}", e),
+        }
+    } else {
+        // REPL mode
+        println!("Welcome to Mini Esolang REPL!");
+        println!("Supports variables, functions, operators, and error handling.");
+        println!("Type 'exit;' to quit.");
+
+        loop {
+            print!(">>> ");
+            io::stdout().flush().unwrap();
+
+            let mut input = String::new();
+            if io::stdin().read_line(&mut input).unwrap() == 0 {
+                break; // EOF
+            }
+
+            if input.trim() == "exit;" {
+                println!("Bye!");
+                break;
+            }
+
+            let mut parser = Parser::new(&input);
+            match parser.parse_program() {
+                Ok(stmts) => {
+                    let mut error_occurred = false;
+                    for stmt in stmts {
+                        if let Err(e) = interpreter.exec_stmt(&stmt) {
+                            eprintln!("Runtime Error: {:?}", e);
+                            error_occurred = true;
+                            break;
+                        } else if let Stmt::Expr(expr) = stmt {
+                            // print expression result
+                            match interpreter.eval_expr(&expr) {
+                                Ok(RuntimeValue::Int(i)) => println!("{}", i),
+                                Ok(_) => (),
+                                Err(e) => eprintln!("Runtime Error: {:?}", e),
+                            }
+                        }
+                    }
+                    if error_occurred {
+                        continue;
+                    }
+                }
+                Err(e) => eprintln!("Parse Error: {}", e),
+            }
         }
     }
 }
