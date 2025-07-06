@@ -1,12 +1,17 @@
 # Esostellang - A Mini Esolang
 
-Esostellang is a simple esoteric programming language implemented in Rust. It supports basic programming constructs including variables, arithmetic operators, functions, and error handling.
+Esostellang is a simple esoteric programming language implemented in Rust. It features a unique syntax and supports basic programming constructs including variables, arithmetic operators, functions, and error handling.
 
 ## Features
 
-*   **Variables**: Declare and use variables with `let`.
+*   **Unique Syntax**:
+    *   Variable declarations: `var` (instead of `let`)
+    *   Function definitions: `func` (instead of `fn`)
+    *   Return statements: `ret` (instead of `return`)
+    *   Print function: `shit("message");` or `shit(variable);`
+*   **Variables**: Declare and use variables with `var`.
 *   **Operators**: Perform arithmetic operations with `+`, `-`, `*`, `/`.
-*   **Functions**: Define and call functions with `fn`.
+*   **Functions**: Define and call functions with `func`.
 *   **Error Handling**: Includes runtime error messages for issues like division by zero or undefined variables/functions.
 
 ## How to Build and Run
@@ -38,16 +43,18 @@ You can then type commands directly into the prompt. Type `exit;` to quit.
 
 Example REPL session:
 
-```
+```esostellang
 Welcome to Mini Esolang REPL!
 Supports variables, functions, operators, and error handling.
 Type 'exit;' to quit.
->>> let x = 10;
->>> let y = x + 5;
->>> fn add(a, b) { return a + b; }
->>> let z = add(y, 20);
->>> z;
+>>> var x = 10;
+>>> var y = x + 5;
+>>> func add(a, b) { ret a + b; }
+>>> var z = add(y, 20);
+>>> shit(z);
 35
+>>> shit("Hello from REPL!");
+Hello from REPL!
 >>> exit;
 Bye!
 ```
@@ -59,13 +66,14 @@ You can execute a `.stelpp` file by passing its path as an argument to the execu
 First, create a file (e.g., `example.stelpp`) with your Esostellang code:
 
 ```esostellang
-let a = 5;
-let b = 10;
-fn multiply(x, y) {
-    return x * y;
+var a = 5;
+var b = 10;
+func multiply(x, y) {
+    ret x * y;
 }
-let result = multiply(a, b);
-result;
+var result = multiply(a, b);
+shit(result);
+shit("Hello, Esostellang!");
 ```
 
 Then, run the file using:
@@ -84,6 +92,7 @@ The output for the `example.stelpp` file above would be:
 
 ```
 50
+Hello, Esostellang!
 ```
 
 ### Error Handling Demonstration
@@ -91,9 +100,9 @@ The output for the `example.stelpp` file above would be:
 **Division by Zero:**
 
 ```esostellang
-let x = 10;
-let y = 0;
-x / y;
+var x = 10;
+var y = 0;
+shit(x / y);
 ```
 
 Output:
@@ -105,7 +114,7 @@ Runtime Error: Msg("Division by zero")
 **Undefined Variable:**
 
 ```esostellang
-undefined_var;
+shit(undefined_var);
 ```
 
 Output:
@@ -117,7 +126,7 @@ Runtime Error: Msg("Undefined variable 'undefined_var'")
 **Parse Error (Missing Semicolon):**
 
 ```esostellang
-let x = 10
+var x = 10
 ```
 
 Output:

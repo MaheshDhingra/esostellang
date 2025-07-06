@@ -4,6 +4,7 @@ use std::io::{self, Write};
 #[derive(Debug, Clone, PartialEq)]
 enum Expr {
     Number(i64),
+    StringLiteral(String), // Added for string literals
     Var(String),
     BinOp(Box<Expr>, Op, Box<Expr>),
     Call(String, Vec<Expr>),
@@ -19,15 +20,17 @@ enum Op {
 
 #[derive(Debug, Clone)]
 enum Stmt {
-    Let(String, Expr),
+    VarDecl(String, Expr), // Changed from Let to VarDecl
     Expr(Expr),
     Return(Expr),
     Function(String, Vec<String>, Vec<Stmt>),
+    Print(Expr), // Added for the 'shit' function
 }
 
 #[derive(Debug, Clone)]
 enum RuntimeValue {
     Int(i64),
+    String(String), // Added for string values
     None,
 }
 
@@ -93,6 +96,7 @@ impl Interpreter {
     fn eval_expr(&mut self, expr: &Expr) -> Result<RuntimeValue, RuntimeError> {
         match expr {
             Expr::Number(n) => Ok(RuntimeValue::Int(*n)),
+            Expr::StringLiteral(s) => Ok(RuntimeValue::String(s.clone())), // Handle string literals
             Expr::Var(name) => self.get_var(name),
             Expr::BinOp(lhs, op, rhs) => {
                 let l = self.eval_expr(lhs)?;
@@ -168,7 +172,7 @@ impl Interpreter {
 
     fn exec_stmt(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
         match stmt {
-            Stmt::Let(name, expr) => {
+            Stmt::VarDecl(name, expr) => { // Changed from Stmt::Let
                 let val = self.eval_expr(expr)?;
                 self.declare_var(name, val);
                 Ok(())
@@ -198,6 +202,15 @@ impl Interpreter {
                 );
                 Ok(())
             }
+            Stmt::Print(expr) => { // Handle Print statement
+                let val = self.eval_expr(expr)?;
+                match val {
+                    RuntimeValue::Int(i) => println!("{}", i),
+                    RuntimeValue::String(s) => println!("{}", s),
+                    RuntimeValue::None => println!("None"),
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -206,11 +219,12 @@ impl Interpreter {
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
-    Let,
-    Fn,
-    Return,
+    Var,    // Changed from Let
+    Func,   // Changed from Fn
+    Ret,    // Changed from Return
     Ident(String),
     Number(i64),
+    StringLiteral(String), // Added for string literals
     Plus,
     Minus,
     Star,
@@ -293,6 +307,7 @@ impl<'a> Lexer<'a> {
                 self.pos += 1;
                 Some(Token::Equal)
             }
+            '"' => Some(self.lex_string()), // Handle string literals
             c if c.is_ascii_digit() => Some(self.lex_number()),
             c if is_ident_start(c) => Some(self.lex_ident()),
             _ => None,
@@ -315,6 +330,17 @@ impl<'a> Lexer<'a> {
         Token::Number(n)
     }
 
+    fn lex_string(&mut self) -> Token {
+        self.pos += 1; // Consume the opening quote
+        let start = self.pos;
+        while self.pos < self.chars.len() && self.chars[self.pos] != '"' {
+            self.pos += 1;
+        }
+        let s: String = self.chars[start..self.pos].iter().collect();
+        self.pos += 1; // Consume the closing quote
+        Token::StringLiteral(s)
+    }
+
     fn lex_ident(&mut self) -> Token {
         let start = self.pos;
         while self.pos < self.chars.len() && is_ident_continue(self.chars[self.pos]) {
@@ -323,9 +349,9 @@ impl<'a> Lexer<'a> {
         let s: String = self.chars[start..self.pos].iter().collect();
 
         match s.as_str() {
-            "let" => Token::Let,
-            "fn" => Token::Fn,
-            "return" => Token::Return,
+            "var" => Token::Var,     // Changed from "let"
+            "func" => Token::Func,   // Changed from "fn"
+            "ret" => Token::Ret,     // Changed from "return"
             _ => Token::Ident(s),
         }
     }
@@ -382,23 +408,24 @@ impl<'a> Parser<'a> {
 
     fn parse_stmt(&mut self) -> Result<Stmt, String> {
         match &self.cur_token {
-            Some(Token::Let) => self.parse_let_stmt(),
-            Some(Token::Fn) => self.parse_function_stmt(),
-            Some(Token::Return) => self.parse_return_stmt(),
+            Some(Token::Var) => self.parse_var_decl_stmt(), // Changed from Let
+            Some(Token::Func) => self.parse_function_stmt(), // Changed from Fn
+            Some(Token::Ret) => self.parse_return_stmt(),   // Changed from Return
+            Some(Token::Ident(s)) if s == "shit" => self.parse_print_stmt(), // Handle 'shit' function
             _ => self.parse_expr_stmt(),
         }
     }
 
-    fn parse_let_stmt(&mut self) -> Result<Stmt, String> {
-        // let x = expr;
-        self.next_token(); // consume 'let'
+    fn parse_var_decl_stmt(&mut self) -> Result<Stmt, String> {
+        // var x = expr;
+        self.next_token(); // consume 'var'
         let name = match &self.cur_token {
             Some(Token::Ident(s)) => s.clone(),
-            _ => return Err("Expected identifier after let".into()),
+            _ => return Err("Expected identifier after var".into()),
         };
         self.next_token();
         if self.cur_token != Some(Token::Equal) {
-            return Err("Expected '=' after identifier in let statement".into());
+            return Err("Expected '=' after identifier in var declaration".into());
         }
         self.next_token(); // consume '='
         let expr = self.parse_expr()?;
@@ -406,15 +433,15 @@ impl<'a> Parser<'a> {
             return Err("Expected ';' after expression".into());
         }
         self.next_token(); // consume ';'
-        Ok(Stmt::Let(name, expr))
+        Ok(Stmt::VarDecl(name, expr)) // Changed from Stmt::Let
     }
 
     fn parse_function_stmt(&mut self) -> Result<Stmt, String> {
-        // fn name(params) { body }
-        self.next_token(); // consume 'fn'
+        // func name(params) { body }
+        self.next_token(); // consume 'func'
         let name = match &self.cur_token {
             Some(Token::Ident(s)) => s.clone(),
-            _ => return Err("Expected function name after fn".into()),
+            _ => return Err("Expected function name after func".into()),
         };
         self.next_token();
 
@@ -463,13 +490,31 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_return_stmt(&mut self) -> Result<Stmt, String> {
-        self.next_token(); // consume 'return'
+        self.next_token(); // consume 'ret'
         let expr = self.parse_expr()?;
         if self.cur_token != Some(Token::Semicolon) {
             return Err("Expected ';' after return expression".into());
         }
         self.next_token();
         Ok(Stmt::Return(expr))
+    }
+
+    fn parse_print_stmt(&mut self) -> Result<Stmt, String> {
+        self.next_token(); // consume 'shit'
+        if self.cur_token != Some(Token::LParen) {
+            return Err("Expected '(' after 'shit'".into());
+        }
+        self.next_token(); // consume '('
+        let expr = self.parse_expr()?;
+        if self.cur_token != Some(Token::RParen) {
+            return Err("Expected ')' after print expression".into());
+        }
+        self.next_token(); // consume ')'
+        if self.cur_token != Some(Token::Semicolon) {
+            return Err("Expected ';' after print statement".into());
+        }
+        self.next_token(); // consume ';'
+        Ok(Stmt::Print(expr))
     }
 
     fn parse_expr_stmt(&mut self) -> Result<Stmt, String> {
@@ -508,6 +553,11 @@ impl<'a> Parser<'a> {
                 let val = *n;
                 self.next_token();
                 Ok(Expr::Number(val))
+            }
+            Some(Token::StringLiteral(s)) => { // Handle string literals
+                let val = s.clone();
+                self.next_token();
+                Ok(Expr::StringLiteral(val))
             }
             Some(Token::Ident(name)) => {
                 let name = name.clone();
