@@ -1,8 +1,39 @@
 var a = 5;
 var b = 10;
+
 func multiply(x, y) {
     ret x * y;
 }
+
 var result = multiply(a, b);
-shit(result);
-shit("Hello, Esostellang!");
+shit(result); // Should print 50
+
+shit("--- Testing If/Else and Booleans ---");
+
+var num = 7;
+if (num > 5) {
+    shit("Number is greater than 5!");
+} else {
+    shit("Number is not greater than 5.");
+}
+
+var is_seven = (num == 7); // Example of boolean assignment
+if (is_seven) {
+    shit("Number is seven.");
+} else {
+    shit("Number is not seven.");
+}
+
+shit("--- Testing User Input (gimme) ---");
+shit("What's your favorite number?");
+var fav_num_str = gimme();
+shit("You said your favorite number is: ");
+shit(fav_num_str);
+
+// Example of comparison operators
+shit(5 == 5);   // true
+shit(5 != 10);  // true
+shit(10 > 5);   // true
+shit(5 < 10);   // true
+shit(5 >= 5);   // true
+shit(10 <= 5);  // false

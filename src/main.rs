@@ -4,7 +4,8 @@ use std::io::{self, Write};
 #[derive(Debug, Clone, PartialEq)]
 enum Expr {
     Number(i64),
-    StringLiteral(String), // Added for string literals
+    StringLiteral(String),
+    BoolLiteral(bool), // Added for boolean literals
     Var(String),
     BinOp(Box<Expr>, Op, Box<Expr>),
     Call(String, Vec<Expr>),
@@ -16,21 +17,29 @@ enum Op {
     Sub,
     Mul,
     Div,
+    Equal, // ==
+    NotEqual, // !=
+    LessThan, // <
+    GreaterThan, // >
+    LessThanEqual, // <=
+    GreaterThanEqual, // >=
 }
 
 #[derive(Debug, Clone)]
 enum Stmt {
-    VarDecl(String, Expr), // Changed from Let to VarDecl
+    VarDecl(String, Expr),
     Expr(Expr),
     Return(Expr),
     Function(String, Vec<String>, Vec<Stmt>),
-    Print(Expr), // Added for the 'shit' function
+    Print(Expr),
+    If(Expr, Vec<Stmt>, Option<Vec<Stmt>>), // Added for if/else control flow
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)] // Added PartialEq for comparisons
 enum RuntimeValue {
     Int(i64),
-    String(String), // Added for string values
+    String(String),
+    Bool(bool),
     None,
 }
 
@@ -96,83 +105,111 @@ impl Interpreter {
     fn eval_expr(&mut self, expr: &Expr) -> Result<RuntimeValue, RuntimeError> {
         match expr {
             Expr::Number(n) => Ok(RuntimeValue::Int(*n)),
-            Expr::StringLiteral(s) => Ok(RuntimeValue::String(s.clone())), // Handle string literals
+            Expr::StringLiteral(s) => Ok(RuntimeValue::String(s.clone())),
+            Expr::BoolLiteral(b) => Ok(RuntimeValue::Bool(*b)), // Handle boolean literals
             Expr::Var(name) => self.get_var(name),
             Expr::BinOp(lhs, op, rhs) => {
                 let l = self.eval_expr(lhs)?;
                 let r = self.eval_expr(rhs)?;
-                match (l, r) {
-                    (RuntimeValue::Int(a), RuntimeValue::Int(b)) => match op {
-                        Op::Add => Ok(RuntimeValue::Int(a + b)),
-                        Op::Sub => Ok(RuntimeValue::Int(a - b)),
-                        Op::Mul => Ok(RuntimeValue::Int(a * b)),
-                        Op::Div => {
-                            if b == 0 {
-                                Err(RuntimeError::Msg("Division by zero".to_string()))
-                            } else {
-                                Ok(RuntimeValue::Int(a / b))
-                            }
+                match op {
+                    Op::Add | Op::Sub | Op::Mul | Op::Div => {
+                        match (l.clone(), r.clone()) { // Clone here
+                            (RuntimeValue::Int(a), RuntimeValue::Int(b)) => match op {
+                                Op::Add => Ok(RuntimeValue::Int(a + b)),
+                                Op::Sub => Ok(RuntimeValue::Int(a - b)),
+                                Op::Mul => Ok(RuntimeValue::Int(a * b)),
+                                Op::Div => {
+                                    if b == 0 {
+                                        Err(RuntimeError::Msg("Division by zero".to_string()))
+                                    } else {
+                                        Ok(RuntimeValue::Int(a / b))
+                                    }
+                                }
+                                _ => unreachable!(),
+                            },
+                            _ => Err(RuntimeError::Msg(format!("Invalid operands for {:?}: {:?}, {:?}", op, l, r))),
                         }
+                    }
+                    Op::Equal => Ok(RuntimeValue::Bool(l == r)),
+                    Op::NotEqual => Ok(RuntimeValue::Bool(l != r)),
+                    Op::LessThan => match (l.clone(), r.clone()) { // Clone here
+                        (RuntimeValue::Int(a), RuntimeValue::Int(b)) => Ok(RuntimeValue::Bool(a < b)),
+                        _ => Err(RuntimeError::Msg(format!("Invalid operands for < : {:?}, {:?}", l, r))),
                     },
-                    _ => Err(RuntimeError::Msg("Invalid operands".to_string())),
+                    Op::GreaterThan => match (l.clone(), r.clone()) { // Clone here
+                        (RuntimeValue::Int(a), RuntimeValue::Int(b)) => Ok(RuntimeValue::Bool(a > b)),
+                        _ => Err(RuntimeError::Msg(format!("Invalid operands for > : {:?}, {:?}", l, r))),
+                    },
+                    Op::LessThanEqual => match (l.clone(), r.clone()) { // Clone here
+                        (RuntimeValue::Int(a), RuntimeValue::Int(b)) => Ok(RuntimeValue::Bool(a <= b)),
+                        _ => Err(RuntimeError::Msg(format!("Invalid operands for <= : {:?}, {:?}", l, r))),
+                    },
+                    Op::GreaterThanEqual => match (l.clone(), r.clone()) { // Clone here
+                        (RuntimeValue::Int(a), RuntimeValue::Int(b)) => Ok(RuntimeValue::Bool(a >= b)),
+                        _ => Err(RuntimeError::Msg(format!("Invalid operands for >= : {:?}, {:?}", l, r))),
+                    },
                 }
             }
             Expr::Call(name, args) => {
-                let func_data = self
-                    .funcs
-                    .get(name)
-                    .ok_or_else(|| RuntimeError::Msg(format!("Undefined function '{}'", name)))?
-                    .clone();
-
-                if args.len() != func_data.params.len() {
-                    return Err(RuntimeError::Msg(format!(
-                        "Function '{}' expects {} arguments, got {}",
-                        name,
-                        func_data.params.len(),
-                        args.len()
-                    )));
-                }
-
-                // Extract params and body before mutable borrows
-                let func_params = func_data.params.clone();
-                let func_body = func_data.body.clone();
-
-                // Evaluate args
-                let mut evaluated_args = Vec::new();
-                for arg in args {
-                    evaluated_args.push(self.eval_expr(arg)?);
-                }
-
-                // Push new scope
-                self.push_scope();
-
-                // Assign params to args
-                for (param, val) in func_params.iter().zip(evaluated_args.into_iter()) {
-                    self.declare_var(param, val);
-                }
-
-                // Execute function body
-                self.return_value = None;
-                for stmt in &func_body {
-                    self.exec_stmt(stmt)?;
-                    if self.return_value.is_some() {
-                        break;
+                if name == "gimme" {
+                    if !args.is_empty() {
+                        return Err(RuntimeError::Msg("gimme() takes no arguments".to_string()));
                     }
+                    let mut input = String::new();
+                    io::stdin().read_line(&mut input)
+                        .map_err(|e| RuntimeError::Msg(format!("Failed to read input: {}", e)))?;
+                    Ok(RuntimeValue::String(input.trim_end().to_string()))
+                } else {
+                    let func_data = self
+                        .funcs
+                        .get(name)
+                        .ok_or_else(|| RuntimeError::Msg(format!("Undefined function '{}'", name)))?
+                        .clone();
+
+                    if args.len() != func_data.params.len() {
+                        return Err(RuntimeError::Msg(format!(
+                            "Function '{}' expects {} arguments, got {}",
+                            name,
+                            func_data.params.len(),
+                            args.len()
+                        )));
+                    }
+
+                    let func_params = func_data.params.clone();
+                    let func_body = func_data.body.clone();
+
+                    let mut evaluated_args = Vec::new();
+                    for arg in args {
+                        evaluated_args.push(self.eval_expr(arg)?);
+                    }
+
+                    self.push_scope();
+
+                    for (param, val) in func_params.iter().zip(evaluated_args.into_iter()) {
+                        self.declare_var(param, val);
+                    }
+
+                    self.return_value = None;
+                    for stmt in &func_body {
+                        self.exec_stmt(stmt)?;
+                        if self.return_value.is_some() {
+                            break;
+                        }
+                    }
+
+                    let ret = self.return_value.take().unwrap_or(RuntimeValue::None);
+
+                    self.pop_scope();
+
+                    Ok(ret)
                 }
-
-                let ret = self.return_value.take().unwrap_or(RuntimeValue::None);
-
-                // Pop scope
-                self.pop_scope();
-
-                Ok(ret)
             }
         }
     }
 
     fn exec_stmt(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
         match stmt {
-            Stmt::VarDecl(name, expr) => { // Changed from Stmt::Let
+            Stmt::VarDecl(name, expr) => {
                 let val = self.eval_expr(expr)?;
                 self.declare_var(name, val);
                 Ok(())
@@ -202,14 +239,37 @@ impl Interpreter {
                 );
                 Ok(())
             }
-            Stmt::Print(expr) => { // Handle Print statement
+            Stmt::Print(expr) => {
                 let val = self.eval_expr(expr)?;
                 match val {
                     RuntimeValue::Int(i) => println!("{}", i),
                     RuntimeValue::String(s) => println!("{}", s),
+                    RuntimeValue::Bool(b) => println!("{}", b), // Print boolean values
                     RuntimeValue::None => println!("None"),
                 }
                 Ok(())
+            }
+            Stmt::If(condition, then_body, else_body) => { // Handle If statement
+                let cond_val = self.eval_expr(condition)?;
+                match cond_val {
+                    RuntimeValue::Bool(b) => {
+                        if b {
+                            self.push_scope();
+                            for stmt in then_body {
+                                self.exec_stmt(stmt)?;
+                            }
+                            self.pop_scope();
+                        } else if let Some(else_stmts) = else_body {
+                            self.push_scope();
+                            for stmt in else_stmts {
+                                self.exec_stmt(stmt)?;
+                            }
+                            self.pop_scope();
+                        }
+                        Ok(())
+                    }
+                    _ => Err(RuntimeError::Msg("If condition must be a boolean".to_string())),
+                }
             }
         }
     }
@@ -219,12 +279,14 @@ impl Interpreter {
 
 #[derive(Debug, Clone, PartialEq)]
 enum Token {
-    Var,    // Changed from Let
-    Func,   // Changed from Fn
-    Ret,    // Changed from Return
+    Var,
+    Func,
+    Ret,
     Ident(String),
     Number(i64),
-    StringLiteral(String), // Added for string literals
+    StringLiteral(String),
+    True, // Added for boolean literal
+    False, // Added for boolean literal
     Plus,
     Minus,
     Star,
@@ -235,7 +297,15 @@ enum Token {
     RBrace,
     Comma,
     Semicolon,
-    Equal,
+    Equal, // = (assignment)
+    EqEq, // ==
+    NotEq, // !=
+    Lt, // <
+    Gt, // >
+    LtEq, // <=
+    GtEq, // >=
+    If, // Added for control flow
+    Else, // Added for control flow
 }
 
 struct Lexer<'a> {
@@ -305,9 +375,42 @@ impl<'a> Lexer<'a> {
             }
             '=' => {
                 self.pos += 1;
-                Some(Token::Equal)
+                if self.pos < self.chars.len() && self.chars[self.pos] == '=' {
+                    self.pos += 1;
+                    Some(Token::EqEq)
+                } else {
+                    Some(Token::Equal)
+                }
             }
-            '"' => Some(self.lex_string()), // Handle string literals
+            '!' => {
+                self.pos += 1;
+                if self.pos < self.chars.len() && self.chars[self.pos] == '=' {
+                    self.pos += 1;
+                    Some(Token::NotEq)
+                } else {
+                    // Handle single '!' if it becomes a future operator
+                    None // For now, single '!' is not a token
+                }
+            }
+            '<' => {
+                self.pos += 1;
+                if self.pos < self.chars.len() && self.chars[self.pos] == '=' {
+                    self.pos += 1;
+                    Some(Token::LtEq)
+                } else {
+                    Some(Token::Lt)
+                }
+            }
+            '>' => {
+                self.pos += 1;
+                if self.pos < self.chars.len() && self.chars[self.pos] == '=' {
+                    self.pos += 1;
+                    Some(Token::GtEq)
+                } else {
+                    Some(Token::Gt)
+                }
+            }
+            '"' => Some(self.lex_string()),
             c if c.is_ascii_digit() => Some(self.lex_number()),
             c if is_ident_start(c) => Some(self.lex_ident()),
             _ => None,
@@ -349,9 +452,13 @@ impl<'a> Lexer<'a> {
         let s: String = self.chars[start..self.pos].iter().collect();
 
         match s.as_str() {
-            "var" => Token::Var,     // Changed from "let"
-            "func" => Token::Func,   // Changed from "fn"
-            "ret" => Token::Ret,     // Changed from "return"
+            "var" => Token::Var,
+            "func" => Token::Func,
+            "ret" => Token::Ret,
+            "true" => Token::True, // Added for boolean literal
+            "false" => Token::False, // Added for boolean literal
+            "if" => Token::If, // Added for control flow
+            "else" => Token::Else, // Added for control flow
             _ => Token::Ident(s),
         }
     }
@@ -408,10 +515,11 @@ impl<'a> Parser<'a> {
 
     fn parse_stmt(&mut self) -> Result<Stmt, String> {
         match &self.cur_token {
-            Some(Token::Var) => self.parse_var_decl_stmt(), // Changed from Let
-            Some(Token::Func) => self.parse_function_stmt(), // Changed from Fn
-            Some(Token::Ret) => self.parse_return_stmt(),   // Changed from Return
-            Some(Token::Ident(s)) if s == "shit" => self.parse_print_stmt(), // Handle 'shit' function
+            Some(Token::Var) => self.parse_var_decl_stmt(),
+            Some(Token::Func) => self.parse_function_stmt(),
+            Some(Token::Ret) => self.parse_return_stmt(),
+            Some(Token::Ident(s)) if s == "shit" => self.parse_print_stmt(),
+            Some(Token::If) => self.parse_if_stmt(), // Handle 'if' statement
             _ => self.parse_expr_stmt(),
         }
     }
@@ -554,10 +662,18 @@ impl<'a> Parser<'a> {
                 self.next_token();
                 Ok(Expr::Number(val))
             }
-            Some(Token::StringLiteral(s)) => { // Handle string literals
+            Some(Token::StringLiteral(s)) => {
                 let val = s.clone();
                 self.next_token();
                 Ok(Expr::StringLiteral(val))
+            }
+            Some(Token::True) => { // Handle boolean literal
+                self.next_token();
+                Ok(Expr::BoolLiteral(true))
+            }
+            Some(Token::False) => { // Handle boolean literal
+                self.next_token();
+                Ok(Expr::BoolLiteral(false))
             }
             Some(Token::Ident(name)) => {
                 let name = name.clone();
@@ -599,6 +715,53 @@ impl<'a> Parser<'a> {
             _ => Err("Unexpected token in expression".into()),
         }
     }
+
+    fn parse_if_stmt(&mut self) -> Result<Stmt, String> {
+        self.next_token(); // consume 'if'
+        if self.cur_token != Some(Token::LParen) {
+            return Err("Expected '(' after 'if'".into());
+        }
+        self.next_token(); // consume '('
+        let condition = self.parse_expr()?;
+        if self.cur_token != Some(Token::RParen) {
+            return Err("Expected ')' after if condition".into());
+        }
+        self.next_token(); // consume ')'
+
+        if self.cur_token != Some(Token::LBrace) {
+            return Err("Expected '{' to start if body".into());
+        }
+        self.next_token(); // consume '{'
+
+        let mut then_body = Vec::new();
+        while self.cur_token != Some(Token::RBrace) && self.cur_token.is_some() {
+            then_body.push(self.parse_stmt()?);
+        }
+        if self.cur_token != Some(Token::RBrace) {
+            return Err("Expected '}' at end of if body".into());
+        }
+        self.next_token(); // consume '}'
+
+        let mut else_body = None;
+        if self.cur_token == Some(Token::Else) {
+            self.next_token(); // consume 'else'
+            if self.cur_token != Some(Token::LBrace) {
+                return Err("Expected '{' to start else body".into());
+            }
+            self.next_token(); // consume '{'
+            let mut else_stmts = Vec::new();
+            while self.cur_token != Some(Token::RBrace) && self.cur_token.is_some() {
+                else_stmts.push(self.parse_stmt()?);
+            }
+            if self.cur_token != Some(Token::RBrace) {
+                return Err("Expected '}' at end of else body".into());
+            }
+            self.next_token(); // consume '}'
+            else_body = Some(else_stmts);
+        }
+
+        Ok(Stmt::If(condition, then_body, else_body))
+    }
 }
 
 fn token_to_op(token: &Token) -> Option<Op> {
@@ -607,6 +770,12 @@ fn token_to_op(token: &Token) -> Option<Op> {
         Token::Minus => Some(Op::Sub),
         Token::Star => Some(Op::Mul),
         Token::Slash => Some(Op::Div),
+        Token::EqEq => Some(Op::Equal),
+        Token::NotEq => Some(Op::NotEqual),
+        Token::Lt => Some(Op::LessThan),
+        Token::Gt => Some(Op::GreaterThan),
+        Token::LtEq => Some(Op::LessThanEqual),
+        Token::GtEq => Some(Op::GreaterThanEqual),
         _ => None,
     }
 }
@@ -615,6 +784,7 @@ fn op_prec(op: Op) -> u8 {
     match op {
         Op::Add | Op::Sub => 1,
         Op::Mul | Op::Div => 2,
+        Op::Equal | Op::NotEqual | Op::LessThan | Op::GreaterThan | Op::LessThanEqual | Op::GreaterThanEqual => 0, // Lowest precedence for comparisons
     }
 }
 
