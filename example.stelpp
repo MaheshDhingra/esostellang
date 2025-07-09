@@ -17,7 +17,7 @@ if (num > 5) {
     shit("Number is not greater than 5.");
 }
 
-var is_seven = (num == 7); // Example of boolean assignment
+var is_seven = num == 7; // Example of boolean assignment
 if (is_seven) {
     shit("Number is seven.");
 } else {
