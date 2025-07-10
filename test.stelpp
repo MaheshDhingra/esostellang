@@ -1,0 +1,32 @@
+var x = 10;
+shit(x); // Should print 10
+
+x = 20;
+shit(x); // Should print 20
+
+var y = 5;
+y = y + 1;
+shit(y); // Should print 6
+
+// Test re-assignment of a variable declared in a different scope
+func update_global() {
+    x = 30;
+}
+update_global();
+shit(x); // Should print 30
+
+// Test re-assignment within an if block
+var z = 100;
+if (true) {
+    z = 200;
+}
+shit(z); // Should print 200
+
+// Test re-assignment within an else block
+var w = 1000;
+if (false) {
+    // This block won't execute
+} else {
+    w = 2000;
+}
+shit(w); // Should print 2000

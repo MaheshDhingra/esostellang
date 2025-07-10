@@ -541,14 +541,7 @@ impl<'a> Parser<'a> {
             Some(Token::Ret) => self.parse_return_stmt(),
             Some(Token::Ident(s)) if s == "shit" => self.parse_print_stmt(),
             Some(Token::If) => self.parse_if_stmt(), // Handle 'if' statement
-            Some(Token::Ident(name)) => {
-                // Check if it's an assignment or an expression statement
-                if self.peek_token == Some(Token::Equal) {
-                    self.parse_assignment_stmt(name.clone())
-                } else {
-                    self.parse_expr_stmt()
-                }
-            }
+            Some(Token::Ident(_)) if self.peek_token == Some(Token::Equal) => self.parse_assignment_stmt(),
             _ => self.parse_expr_stmt(),
         }
     }
@@ -792,9 +785,17 @@ impl<'a> Parser<'a> {
         Ok(Stmt::If(condition, then_body, else_body))
     }
 
-    fn parse_assignment_stmt(&mut self, name: String) -> Result<Stmt, String> {
-        // name = expr;
-        self.next_token(); // consume '='
+    fn parse_assignment_stmt(&mut self) -> Result<Stmt, String> {
+        // cur_token is Ident, peek_token is Equal
+        let name = match self.cur_token.take() {
+            Some(Token::Ident(s)) => s,
+            _ => return Err("Expected identifier for assignment".into()),
+        };
+        self.next_token(); // cur_token is now Equal
+        if self.cur_token != Some(Token::Equal) {
+            return Err("Expected '=' after identifier in assignment".into());
+        }
+        self.next_token(); // cur_token is now the start of the expression
         let expr = self.parse_expr()?;
         if self.cur_token != Some(Token::Semicolon) {
             return Err("Expected ';' after assignment expression".into());
