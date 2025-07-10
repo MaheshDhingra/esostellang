@@ -526,13 +526,6 @@ impl<'a> Parser<'a> {
         Ok(stmts)
     }
 
-    fn expect_cur(&self, expected: &Token) -> bool {
-        if let Some(t) = &self.cur_token {
-            std::mem::discriminant(t) == std::mem::discriminant(expected)
-        } else {
-            false
-        }
-    }
 
     fn parse_stmt(&mut self) -> Result<Stmt, String> {
         match &self.cur_token {

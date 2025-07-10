@@ -14,6 +14,7 @@ Esostellang is a simple esoteric programming language implemented in Rust. It fe
     *   Strings (`"hello"`, `"world"`)
     *   Booleans (`true`, `false`)
 *   **Variables**: Declare and use variables with `var`.
+*   **Variable Re-assignment**: Re-assign values to existing variables using the `=` operator.
 *   **Operators**:
     *   Arithmetic: `+`, `-`, `*`, `/`
     *   Comparison: `==` (equal), `!=` (not equal), `<` (less than), `>` (greater than), `<=` (less than or equal), `>=` (greater than or equal)
@@ -99,12 +100,20 @@ if (num > 5) {
     shit("Number is not greater than 5.");
 }
 
-var is_even = (num == 7); // Example of boolean assignment
-if (is_even) {
-    shit("Number is odd."); // This will print as 7 is odd
+var is_seven = num == 7; // Example of boolean assignment
+if (is_seven) {
+    shit("Number is seven.");
 } else {
-    shit("Number is even.");
+    shit("Number is not seven.");
 }
+
+// Example of variable re-assignment
+var counter = 1;
+shit("Counter before re-assignment: ");
+shit(counter); // Should print 1
+counter = counter + 1;
+shit("Counter after re-assignment: ");
+shit(counter); // Should print 2
 
 shit("--- Testing User Input (gimme) ---");
 shit("What's your favorite number?");
@@ -137,14 +146,18 @@ The output for the `example.stelpp` file above (assuming user inputs `42` for `g
 
 ```
 50
-Hello, Esostellang!
 --- Testing If/Else and Booleans ---
 Number is greater than 5!
-Number is odd.
+Number is seven.
 --- Testing User Input (gimme) ---
 What's your favorite number?
 You said your favorite number is: 
 42
+--- Testing Variable Re-assignment ---
+Counter before re-assignment: 
+1
+Counter after re-assignment: 
+2
 true
 true
 true
