@@ -28,6 +28,7 @@ enum Op {
 #[derive(Debug, Clone)]
 enum Stmt {
     VarDecl(String, Expr),
+    Assign(String, Expr), // Added for variable assignment
     Expr(Expr),
     Return(Expr),
     Function(String, Vec<String>, Vec<Stmt>),
@@ -212,6 +213,11 @@ impl Interpreter {
             Stmt::VarDecl(name, expr) => {
                 let val = self.eval_expr(expr)?;
                 self.declare_var(name, val);
+                Ok(())
+            }
+            Stmt::Assign(name, expr) => {
+                let val = self.eval_expr(expr)?;
+                self.assign_var(name, val)?;
                 Ok(())
             }
             Stmt::Expr(expr) => {
@@ -418,8 +424,23 @@ impl<'a> Lexer<'a> {
     }
 
     fn skip_whitespace(&mut self) {
-        while self.pos < self.chars.len() && self.chars[self.pos].is_whitespace() {
-            self.pos += 1;
+        loop {
+            let mut changed = false;
+            while self.pos < self.chars.len() && self.chars[self.pos].is_whitespace() {
+                self.pos += 1;
+                changed = true;
+            }
+            // Handle single-line comments
+            if self.pos + 1 < self.chars.len() && self.chars[self.pos] == '/' && self.chars[self.pos + 1] == '/' {
+                self.pos += 2; // Consume "//"
+                while self.pos < self.chars.len() && self.chars[self.pos] != '\n' && self.chars[self.pos] != '\r' {
+                    self.pos += 1;
+                }
+                changed = true;
+            }
+            if !changed {
+                break;
+            }
         }
     }
 
@@ -520,6 +541,14 @@ impl<'a> Parser<'a> {
             Some(Token::Ret) => self.parse_return_stmt(),
             Some(Token::Ident(s)) if s == "shit" => self.parse_print_stmt(),
             Some(Token::If) => self.parse_if_stmt(), // Handle 'if' statement
+            Some(Token::Ident(name)) => {
+                // Check if it's an assignment or an expression statement
+                if self.peek_token == Some(Token::Equal) {
+                    self.parse_assignment_stmt(name.clone())
+                } else {
+                    self.parse_expr_stmt()
+                }
+            }
             _ => self.parse_expr_stmt(),
         }
     }
@@ -761,6 +790,17 @@ impl<'a> Parser<'a> {
         }
 
         Ok(Stmt::If(condition, then_body, else_body))
+    }
+
+    fn parse_assignment_stmt(&mut self, name: String) -> Result<Stmt, String> {
+        // name = expr;
+        self.next_token(); // consume '='
+        let expr = self.parse_expr()?;
+        if self.cur_token != Some(Token::Semicolon) {
+            return Err("Expected ';' after assignment expression".into());
+        }
+        self.next_token(); // consume ';'
+        Ok(Stmt::Assign(name, expr))
     }
 }
 
