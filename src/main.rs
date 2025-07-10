@@ -23,6 +23,8 @@ enum Op {
     GreaterThan, // >
     LessThanEqual, // <=
     GreaterThanEqual, // >=
+    And, // &&
+    Or, // ||
 }
 
 #[derive(Debug, Clone)]
@@ -46,7 +48,7 @@ enum RuntimeValue {
 
 #[derive(Debug)]
 enum RuntimeError {
-    Msg(String),
+    Msg(String), // Keep String for actual error messages
 }
 
 #[derive(Clone)]
@@ -148,6 +150,14 @@ impl Interpreter {
                     Op::GreaterThanEqual => match (l.clone(), r.clone()) { // Clone here
                         (RuntimeValue::Int(a), RuntimeValue::Int(b)) => Ok(RuntimeValue::Bool(a >= b)),
                         _ => Err(RuntimeError::Msg(format!("Invalid operands for >= : {:?}, {:?}", l, r))),
+                    },
+                    Op::And => match (l.clone(), r.clone()) {
+                        (RuntimeValue::Bool(a), RuntimeValue::Bool(b)) => Ok(RuntimeValue::Bool(a && b)),
+                        _ => Err(RuntimeError::Msg(format!("Invalid operands for && : {:?}, {:?}", l, r))),
+                    },
+                    Op::Or => match (l.clone(), r.clone()) {
+                        (RuntimeValue::Bool(a), RuntimeValue::Bool(b)) => Ok(RuntimeValue::Bool(a || b)),
+                        _ => Err(RuntimeError::Msg(format!("Invalid operands for || : {:?}, {:?}", l, r))),
                     },
                 }
             }
@@ -310,20 +320,20 @@ enum Token {
     Gt, // >
     LtEq, // <=
     GtEq, // >=
+    And, // &&
+    Or, // ||
     If, // Added for control flow
     Else, // Added for control flow
 }
 
-struct Lexer<'a> {
-    input: &'a str,
+struct Lexer {
     pos: usize,
     chars: Vec<char>,
 }
 
-impl<'a> Lexer<'a> {
-    fn new(input: &'a str) -> Self {
+impl Lexer {
+    fn new(input: &str) -> Self {
         Self {
-            input,
             pos: 0,
             chars: input.chars().collect(),
         }
@@ -416,6 +426,24 @@ impl<'a> Lexer<'a> {
                     Some(Token::Gt)
                 }
             }
+            '&' => {
+                self.pos += 1;
+                if self.pos < self.chars.len() && self.chars[self.pos] == '&' {
+                    self.pos += 1;
+                    Some(Token::And)
+                } else {
+                    None // Single '&' is not a token
+                }
+            }
+            '|' => {
+                self.pos += 1;
+                if self.pos < self.chars.len() && self.chars[self.pos] == '|' {
+                    self.pos += 1;
+                    Some(Token::Or)
+                } else {
+                    None // Single '|' is not a token
+                }
+            }
             '"' => Some(self.lex_string()),
             c if c.is_ascii_digit() => Some(self.lex_number()),
             c if is_ident_start(c) => Some(self.lex_ident()),
@@ -493,14 +521,14 @@ fn is_ident_continue(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '_'
 }
 
-struct Parser<'a> {
-    lexer: Lexer<'a>,
+struct Parser {
+    lexer: Lexer,
     cur_token: Option<Token>,
     peek_token: Option<Token>,
 }
 
-impl<'a> Parser<'a> {
-    fn new(input: &'a str) -> Self {
+impl Parser {
+    fn new(input: &str) -> Self {
         let mut lexer = Lexer::new(input);
         let cur_token = lexer.next_token();
         let peek_token = lexer.next_token();
@@ -810,15 +838,19 @@ fn token_to_op(token: &Token) -> Option<Op> {
         Token::Gt => Some(Op::GreaterThan),
         Token::LtEq => Some(Op::LessThanEqual),
         Token::GtEq => Some(Op::GreaterThanEqual),
+        Token::And => Some(Op::And),
+        Token::Or => Some(Op::Or),
         _ => None,
     }
 }
 
 fn op_prec(op: Op) -> u8 {
     match op {
-        Op::Add | Op::Sub => 1,
-        Op::Mul | Op::Div => 2,
-        Op::Equal | Op::NotEqual | Op::LessThan | Op::GreaterThan | Op::LessThanEqual | Op::GreaterThanEqual => 0, // Lowest precedence for comparisons
+        Op::Add | Op::Sub => 3,
+        Op::Mul | Op::Div => 4,
+        Op::Equal | Op::NotEqual | Op::LessThan | Op::GreaterThan | Op::LessThanEqual | Op::GreaterThanEqual => 2,
+        Op::And => 1, // Logical AND has lower precedence than comparisons
+        Op::Or => 0,  // Logical OR has the lowest precedence
     }
 }
 
